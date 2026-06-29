@@ -26,7 +26,8 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ success: true, user });
-  } catch {
+  } catch (error) {
+    console.error("[signin] Error:", error);
     return NextResponse.json({ error: "Unable to sign you in right now." }, { status: 500 });
   }
 }
