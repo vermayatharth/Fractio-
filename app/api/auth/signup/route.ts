@@ -36,6 +36,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "An account with this email already exists." }, { status: 409 });
     }
 
+    console.error("[signup] Account creation failed:", error);
     return NextResponse.json({ error: "Unable to create your account right now." }, { status: 500 });
   }
 }
