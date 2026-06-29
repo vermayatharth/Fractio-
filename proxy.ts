@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Auth guard middleware.
+ * Auth guard proxy (Next.js 16 convention, replaces middleware.ts).
  * Redirects unauthenticated visitors to /signup.
  * Allows public routes (signup, signin, API auth) without a session.
  */
@@ -15,7 +15,7 @@ function isPublicPath(pathname: string): boolean {
   );
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow Next.js internals, static assets, and favicon
