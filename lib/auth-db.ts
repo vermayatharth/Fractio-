@@ -1,10 +1,7 @@
-import { mkdirSync } from "fs";
+import { createClient, type Client } from "@libsql/client";
 import { createHash } from "crypto";
-import path from "path";
-import Database from "better-sqlite3";
 
-const dbPath = path.join(process.cwd(), "..", "db", "fractio.sqlite");
-let cachedDb: Database.Database | null = null;
+let cachedClient: Client | null = null;
 
 interface UserRecord {
   id: number;
@@ -27,19 +24,22 @@ export interface InvestmentRecord {
   updated_at: string;
 }
 
-function ensureDbFile() {
-  mkdirSync(path.dirname(dbPath), { recursive: true });
-}
-
-export function getDb() {
-  if (cachedDb) {
-    return cachedDb;
+export function getDb(): Client {
+  if (cachedClient) {
+    return cachedClient;
   }
 
-  ensureDbFile();
-  const db = new Database(dbPath);
-  db.pragma("journal_mode = WAL");
-  db.exec(`
+  cachedClient = createClient({
+    url: process.env.TURSO_DATABASE_URL!,
+    authToken: process.env.TURSO_AUTH_TOKEN || undefined,
+  });
+
+  return cachedClient;
+}
+
+export async function initDb() {
+  const db = getDb();
+  await db.execute(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT NOT NULL UNIQUE,
@@ -50,7 +50,7 @@ export function getDb() {
     );
   `);
 
-  db.exec(`
+  await db.execute(`
     CREATE TABLE IF NOT EXISTS investments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id),
@@ -64,40 +64,44 @@ export function getDb() {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
-
-  cachedDb = db;
-  return db;
 }
+
+// Ensure tables exist on first import
+const _initPromise = initDb();
 
 export function hashPassword(password: string) {
   return createHash("sha256").update(password).digest("hex");
 }
 
-export function createUser(input: {
+export async function createUser(input: {
   email: string;
   fullName: string;
   password: string;
 }) {
+  await _initPromise;
   const db = getDb();
-  const insert = db.prepare(
-    "INSERT INTO users (email, full_name, password_hash) VALUES (?, ?, ?)"
-  );
-  const result = insert.run(input.email.toLowerCase(), input.fullName.trim(), hashPassword(input.password));
+  const result = await db.execute({
+    sql: "INSERT INTO users (email, full_name, password_hash) VALUES (?, ?, ?)",
+    args: [input.email.toLowerCase(), input.fullName.trim(), hashPassword(input.password)],
+  });
 
-  return db
-    .prepare(
-      "SELECT id, email, full_name AS fullName, kyc_tier AS kycTier, created_at AS createdAt FROM users WHERE id = ?"
-    )
-    .get(result.lastInsertRowid) as UserRecord & { fullName: string; kycTier: string; createdAt: string };
+  const row = await db.execute({
+    sql: "SELECT id, email, full_name AS fullName, kyc_tier AS kycTier, created_at AS createdAt FROM users WHERE id = ?",
+    args: [result.lastInsertRowid!],
+  });
+
+  return row.rows[0] as unknown as UserRecord & { fullName: string; kycTier: string; createdAt: string };
 }
 
-export function verifyUser(input: { email: string; password: string }) {
+export async function verifyUser(input: { email: string; password: string }) {
+  await _initPromise;
   const db = getDb();
-  const row = db
-    .prepare(
-      "SELECT id, email, full_name AS fullName, password_hash AS passwordHash, kyc_tier AS kycTier, created_at AS createdAt FROM users WHERE email = ?"
-    )
-    .get(input.email.toLowerCase()) as
+  const result = await db.execute({
+    sql: "SELECT id, email, full_name AS fullName, password_hash AS passwordHash, kyc_tier AS kycTier, created_at AS createdAt FROM users WHERE email = ?",
+    args: [input.email.toLowerCase()],
+  });
+
+  const row = result.rows[0] as unknown as
     | (UserRecord & { fullName: string; passwordHash: string; kycTier: string; createdAt: string })
     | undefined;
 
@@ -113,29 +117,34 @@ export function verifyUser(input: { email: string; password: string }) {
   return safeUser;
 }
 
-export function getUserById(id: string | number) {
+export async function getUserById(id: string | number) {
+  await _initPromise;
   const db = getDb();
-  return db
-    .prepare(
-      "SELECT id, email, full_name AS fullName, kyc_tier AS kycTier, created_at AS createdAt FROM users WHERE id = ?"
-    )
-    .get(Number(id)) as
+  const result = await db.execute({
+    sql: "SELECT id, email, full_name AS fullName, kyc_tier AS kycTier, created_at AS createdAt FROM users WHERE id = ?",
+    args: [Number(id)],
+  });
+
+  return (result.rows[0] as unknown as
     | (UserRecord & { fullName: string; kycTier: string; createdAt: string })
-    | undefined;
+    | undefined) ?? undefined;
 }
 
 // ---------------------------------------------------------------------------
 // Investment CRUD
 // ---------------------------------------------------------------------------
 
-export function getInvestmentsByUser(userId: number): InvestmentRecord[] {
+export async function getInvestmentsByUser(userId: number): Promise<InvestmentRecord[]> {
+  await _initPromise;
   const db = getDb();
-  return db
-    .prepare("SELECT * FROM investments WHERE user_id = ? ORDER BY invested_at DESC")
-    .all(userId) as InvestmentRecord[];
+  const result = await db.execute({
+    sql: "SELECT * FROM investments WHERE user_id = ? ORDER BY invested_at DESC",
+    args: [userId],
+  });
+  return result.rows as unknown as InvestmentRecord[];
 }
 
-export function addInvestment(input: {
+export async function addInvestment(input: {
   userId: number;
   assetName: string;
   city: string;
@@ -144,35 +153,43 @@ export function addInvestment(input: {
   returnsPct: number;
   unitsHeld: number;
 }) {
+  await _initPromise;
   const db = getDb();
-  const insert = db.prepare(
-    `INSERT INTO investments (user_id, asset_name, city, invested_amount, current_value, returns_pct, units_held)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  );
-  const result = insert.run(
-    input.userId,
-    input.assetName,
-    input.city,
-    input.investedAmount,
-    input.currentValue,
-    input.returnsPct,
-    input.unitsHeld
-  );
-  return db.prepare("SELECT * FROM investments WHERE id = ?").get(result.lastInsertRowid) as InvestmentRecord;
+  const result = await db.execute({
+    sql: `INSERT INTO investments (user_id, asset_name, city, invested_amount, current_value, returns_pct, units_held)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      input.userId,
+      input.assetName,
+      input.city,
+      input.investedAmount,
+      input.currentValue,
+      input.returnsPct,
+      input.unitsHeld,
+    ],
+  });
+
+  const row = await db.execute({
+    sql: "SELECT * FROM investments WHERE id = ?",
+    args: [result.lastInsertRowid!],
+  });
+  return row.rows[0] as unknown as InvestmentRecord;
 }
 
-export function getUserPortfolioSummary(userId: number) {
+export async function getUserPortfolioSummary(userId: number) {
+  await _initPromise;
   const db = getDb();
-  const row = db
-    .prepare(
-      `SELECT
-         COALESCE(SUM(invested_amount), 0) AS totalInvested,
-         COALESCE(SUM(current_value), 0) AS currentValue,
-         COUNT(*) AS totalHoldings
-       FROM investments
-       WHERE user_id = ?`
-    )
-    .get(userId) as { totalInvested: number; currentValue: number; totalHoldings: number };
+  const result = await db.execute({
+    sql: `SELECT
+       COALESCE(SUM(invested_amount), 0) AS totalInvested,
+       COALESCE(SUM(current_value), 0) AS currentValue,
+       COUNT(*) AS totalHoldings
+     FROM investments
+     WHERE user_id = ?`,
+    args: [userId],
+  });
+
+  const row = result.rows[0] as unknown as { totalInvested: number; currentValue: number; totalHoldings: number };
 
   const unrealisedGainPct =
     row.totalInvested > 0
@@ -194,7 +211,7 @@ export function getUserPortfolioSummary(userId: number) {
  * Seeds realistic demo investments for a newly registered user.
  * Gives the dashboard an immediate "populated" feel.
  */
-export function seedDemoInvestments(userId: number) {
+export async function seedDemoInvestments(userId: number) {
   const demoAssets = [
     {
       assetName: "Embassy Manyata Tech Park — Block G",
@@ -239,6 +256,6 @@ export function seedDemoInvestments(userId: number) {
   ];
 
   for (const asset of demoAssets) {
-    addInvestment({ userId, ...asset });
+    await addInvestment({ userId, ...asset });
   }
 }

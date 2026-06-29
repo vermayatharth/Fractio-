@@ -10,12 +10,12 @@ export async function GET() {
     return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
   }
 
-  const user = getUserById(userId);
+  const user = await getUserById(userId);
   if (!user) {
     return NextResponse.json({ error: "User not found." }, { status: 401 });
   }
 
-  const investments = getInvestmentsByUser(user.id);
+  const investments = await getInvestmentsByUser(user.id as number);
   return NextResponse.json({ investments });
 }
 
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
   }
 
-  const user = getUserById(userId);
+  const user = await getUserById(userId);
   if (!user) {
     return NextResponse.json({ error: "User not found." }, { status: 401 });
   }
@@ -45,8 +45,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
 
-    const investment = addInvestment({
-      userId: user.id,
+    const investment = await addInvestment({
+      userId: user.id as number,
       assetName,
       city,
       investedAmount,

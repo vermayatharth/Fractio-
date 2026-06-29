@@ -17,10 +17,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Password must be at least 6 characters long." }, { status: 400 });
     }
 
-    const user = createUser({ email, fullName, password });
+    const user = await createUser({ email, fullName, password });
 
     // Seed demo investments so the dashboard isn't empty on first login
-    seedDemoInvestments(user.id);
+    await seedDemoInvestments(user.id as number);
 
     const cookieStore = await cookies();
     cookieStore.set("fractio_session", String(user.id), {

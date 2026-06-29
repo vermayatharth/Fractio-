@@ -10,11 +10,11 @@ export async function GET() {
     return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
   }
 
-  const user = getUserById(userId);
+  const user = await getUserById(userId);
   if (!user) {
     return NextResponse.json({ error: "User not found." }, { status: 401 });
   }
 
-  const summary = getUserPortfolioSummary(user.id);
+  const summary = await getUserPortfolioSummary(user.id as number);
   return NextResponse.json({ summary });
 }
