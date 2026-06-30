@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { createUser, seedDemoInvestments } from "@/lib/auth-db";
+import { createUser } from "@/lib/auth-db";
 
 export async function POST(request: Request) {
   try {
@@ -18,9 +18,6 @@ export async function POST(request: Request) {
     }
 
     const user = await createUser({ email, fullName, password });
-
-    // Seed demo investments so the dashboard isn't empty on first login
-    await seedDemoInvestments(user.id as number);
 
     const cookieStore = await cookies();
     cookieStore.set("fractio_session", String(user.id), {

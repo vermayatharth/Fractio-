@@ -1,10 +1,22 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { RealEstateNews } from "@/components/real-estate-news";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { marketplaceProperties } from "@/lib/mock-data";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { marketplaceProperties, type MarketplaceProperty } from "@/lib/mock-data";
 import { formatINR, formatCrore, formatPercent } from "@/lib/format";
 import {
   Store,
@@ -16,9 +28,75 @@ import {
   IndianRupee,
   BarChart3,
   CalendarDays,
+  Minus,
+  Plus,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  PieChart,
 } from "lucide-react";
 
 export default function MarketplacePage() {
+  const router = useRouter();
+  const [selectedProperty, setSelectedProperty] = useState<MarketplaceProperty | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [units, setUnits] = useState(1);
+  const [buying, setBuying] = useState(false);
+  const [buyResult, setBuyResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  function openBuyDialog(property: MarketplaceProperty) {
+    setSelectedProperty(property);
+    setUnits(1);
+    setBuyResult(null);
+    setDialogOpen(true);
+  }
+
+  async function handleBuy() {
+    if (!selectedProperty || buying) return;
+
+    setBuying(true);
+    setBuyResult(null);
+
+    try {
+      const totalAmount = units * selectedProperty.pricePerUnit;
+      const res = await fetch("/api/investments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assetName: selectedProperty.propertyName,
+          city: selectedProperty.city,
+          investedAmount: totalAmount,
+          currentValue: totalAmount,
+          returnsPct: 0,
+          unitsHeld: units,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setBuyResult({
+          success: true,
+          message: `Successfully purchased ${units} unit${units > 1 ? "s" : ""} of ${selectedProperty.propertyName}!`,
+        });
+      } else {
+        setBuyResult({
+          success: false,
+          message: data.error || "Purchase failed. Please try again.",
+        });
+      }
+    } catch {
+      setBuyResult({
+        success: false,
+        message: "Network error. Please check your connection.",
+      });
+    } finally {
+      setBuying(false);
+    }
+  }
+
+  const totalCost = selectedProperty ? units * selectedProperty.pricePerUnit : 0;
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.12),_transparent_34%),linear-gradient(135deg,_#f8fafc_0%,_#f1f5f9_100%)]">
       <Sidebar />
@@ -95,8 +173,8 @@ export default function MarketplacePage() {
                         <p className="text-lg font-bold">{formatCrore(property.totalValue)}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[10px] text-slate-400 uppercase tracking-wide">Min. Investment</p>
-                        <p className="text-lg font-bold">{formatINR(property.minInvestment)}</p>
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wide">Per Unit</p>
+                        <p className="text-lg font-bold">{formatINR(property.pricePerUnit)}</p>
                       </div>
                     </div>
                   </div>
@@ -133,8 +211,11 @@ export default function MarketplacePage() {
                   </div>
 
                   {/* CTA */}
-                  <button className="mt-4 w-full rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/25 active:scale-[0.98]">
-                    View Details
+                  <button
+                    onClick={() => openBuyDialog(property)}
+                    className="mt-4 w-full rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/25 active:scale-[0.98]"
+                  >
+                    Buy Units
                   </button>
                 </CardContent>
               </Card>
@@ -142,6 +223,169 @@ export default function MarketplacePage() {
           </div>
         </div>
       </main>
+
+      {/* ───── Buy Dialog ───── */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          {buyResult?.success ? (
+            /* ── Success State ── */
+            <div className="flex flex-col items-center gap-4 py-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
+                <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+              </div>
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-foreground">Purchase Successful!</h3>
+                <p className="mt-2 text-sm text-muted-foreground">{buyResult.message}</p>
+              </div>
+              <div className="flex w-full gap-3 mt-2">
+                <DialogClose
+                  render={
+                    <Button variant="outline" className="flex-1" />
+                  }
+                >
+                  Continue Browsing
+                </DialogClose>
+                <Button
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                  onClick={() => {
+                    setDialogOpen(false);
+                    router.push("/portfolio");
+                  }}
+                >
+                  <PieChart className="h-4 w-4 mr-1.5" />
+                  View Portfolio
+                </Button>
+              </div>
+            </div>
+          ) : (
+            /* ── Buy Form ── */
+            <>
+              <DialogHeader>
+                <DialogTitle>Purchase Units</DialogTitle>
+                <DialogDescription>
+                  {selectedProperty?.propertyName} — {selectedProperty?.city}, {selectedProperty?.state}
+                </DialogDescription>
+              </DialogHeader>
+
+              {/* Property Summary */}
+              <div className="rounded-xl bg-slate-950 p-4 text-white">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wide">Price per Unit</p>
+                    <p className="text-lg font-bold mt-0.5">{formatINR(selectedProperty?.pricePerUnit ?? 0)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wide">Projected IRR</p>
+                    <p className="text-lg font-bold text-emerald-400 mt-0.5">
+                      {formatPercent(selectedProperty?.projectedIRR ?? 0)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Units Selector */}
+              <div className="space-y-3">
+                <label className="text-sm font-medium text-foreground">Select Units</label>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setUnits(Math.max(1, units - 1))}
+                    disabled={units <= 1}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-background text-foreground transition-colors hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <div className="flex-1">
+                    <input
+                      type="number"
+                      min={1}
+                      max={selectedProperty?.publicFloatUnits ?? 100}
+                      value={units}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        if (!isNaN(v) && v >= 1) {
+                          setUnits(Math.min(v, selectedProperty?.publicFloatUnits ?? 100));
+                        }
+                      }}
+                      className="w-full rounded-lg border border-border bg-background px-4 py-2 text-center text-lg font-bold text-foreground outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setUnits(Math.min(units + 1, selectedProperty?.publicFloatUnits ?? 100))}
+                    disabled={units >= (selectedProperty?.publicFloatUnits ?? 100)}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-background text-foreground transition-colors hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Quick select buttons */}
+                <div className="flex gap-2">
+                  {[5, 10, 25, 50].map((qty) => (
+                    <button
+                      key={qty}
+                      onClick={() => setUnits(Math.min(qty, selectedProperty?.publicFloatUnits ?? 100))}
+                      className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
+                        units === qty
+                          ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                          : "border-border bg-background text-muted-foreground hover:bg-accent"
+                      }`}
+                    >
+                      {qty} units
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cost Summary */}
+              <div className="rounded-xl border border-border/70 bg-muted/30 p-4 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Units</span>
+                  <span className="font-medium text-foreground">{units}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Price per unit</span>
+                  <span className="font-medium text-foreground">{formatINR(selectedProperty?.pricePerUnit ?? 0)}</span>
+                </div>
+                <div className="border-t border-border/50 pt-2 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-foreground">Total Investment</span>
+                  <span className="text-lg font-bold text-indigo-700">{formatINR(totalCost)}</span>
+                </div>
+              </div>
+
+              {/* Error message */}
+              {buyResult && !buyResult.success && (
+                <div className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {buyResult.message}
+                </div>
+              )}
+
+              <DialogFooter>
+                <DialogClose render={<Button variant="outline" />}>
+                  Cancel
+                </DialogClose>
+                <Button
+                  onClick={handleBuy}
+                  disabled={buying}
+                  className="bg-indigo-600 hover:bg-indigo-700"
+                >
+                  {buying ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                      Processing…
+                    </>
+                  ) : (
+                    <>
+                      <IndianRupee className="h-4 w-4 mr-1.5" />
+                      Confirm Purchase
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
