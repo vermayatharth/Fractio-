@@ -15,6 +15,7 @@ export interface PortfolioSummary {
   currentValue: number;
   unrealisedGainPct: number;
   quarterlyYield: number;
+  availableBalance?: number;
 }
 
 export interface Holding {
@@ -37,10 +38,12 @@ export interface MarketplaceProperty {
   propertyName: string;
   city: string;
   state: string;
+  cityTier: "tier_1" | "tier_2" | "tier_3";
   totalValueCr: number;
   totalValue: number;
   projectedIRR: number;
   dividendYield: number;
+  baseRentalYieldPct: number;
   minInvestment: number;
   pricePerUnit: number;
   totalUnits: number;
@@ -48,6 +51,10 @@ export interface MarketplaceProperty {
   occupancyPct: number;
   waleYears: number;
   assetGrade: string;
+  carpetAreaSqft: number;
+  rbiRepoRatePct: number;
+  expectedRentalEscalationPct: number;
+  terminalCapRatePct: number;
   imageUrl: string;
 }
 
@@ -145,10 +152,12 @@ export const marketplaceProperties: MarketplaceProperty[] = [
     propertyName: "Brigade Gateway — World Trade Center",
     city: "Bangalore",
     state: "Karnataka",
+    cityTier: "tier_1",
     totalValueCr: 185,
     totalValue: 185_00_00_000,
     projectedIRR: 10.5,
     dividendYield: 8.8,
+    baseRentalYieldPct: 9.0,
     minInvestment: 10_00_000,
     pricePerUnit: 11_250,
     totalUnits: 16444,
@@ -156,6 +165,10 @@ export const marketplaceProperties: MarketplaceProperty[] = [
     occupancyPct: 94,
     waleYears: 6.2,
     assetGrade: "Grade A+",
+    carpetAreaSqft: 120000,
+    rbiRepoRatePct: 6.25,
+    expectedRentalEscalationPct: 5.0,
+    terminalCapRatePct: 8.0,
     imageUrl: "",
   },
   {
@@ -164,10 +177,12 @@ export const marketplaceProperties: MarketplaceProperty[] = [
     propertyName: "Godrej BKC — Bandra Kurla Complex",
     city: "Mumbai",
     state: "Maharashtra",
+    cityTier: "tier_1",
     totalValueCr: 420,
     totalValue: 420_00_00_000,
     projectedIRR: 9.2,
     dividendYield: 7.5,
+    baseRentalYieldPct: 8.0,
     minInvestment: 10_00_000,
     pricePerUnit: 15_800,
     totalUnits: 26582,
@@ -175,6 +190,10 @@ export const marketplaceProperties: MarketplaceProperty[] = [
     occupancyPct: 97,
     waleYears: 7.8,
     assetGrade: "Grade A+",
+    carpetAreaSqft: 180000,
+    rbiRepoRatePct: 6.25,
+    expectedRentalEscalationPct: 5.0,
+    terminalCapRatePct: 8.0,
     imageUrl: "",
   },
   {
@@ -183,10 +202,12 @@ export const marketplaceProperties: MarketplaceProperty[] = [
     propertyName: "RMZ Ecoworld — Outer Ring Road",
     city: "Bangalore",
     state: "Karnataka",
+    cityTier: "tier_1",
     totalValueCr: 128,
     totalValue: 128_00_00_000,
     projectedIRR: 11.8,
     dividendYield: 9.2,
+    baseRentalYieldPct: 9.7,
     minInvestment: 10_00_000,
     pricePerUnit: 9_500,
     totalUnits: 13473,
@@ -194,6 +215,10 @@ export const marketplaceProperties: MarketplaceProperty[] = [
     occupancyPct: 91,
     waleYears: 5.1,
     assetGrade: "Grade A",
+    carpetAreaSqft: 100000,
+    rbiRepoRatePct: 6.25,
+    expectedRentalEscalationPct: 5.0,
+    terminalCapRatePct: 8.0,
     imageUrl: "",
   },
   {
@@ -202,10 +227,12 @@ export const marketplaceProperties: MarketplaceProperty[] = [
     propertyName: "Salarpuria Sattva — Knowledge City",
     city: "Hyderabad",
     state: "Telangana",
+    cityTier: "tier_2",
     totalValueCr: 95,
     totalValue: 95_00_00_000,
     projectedIRR: 12.4,
     dividendYield: 9.8,
+    baseRentalYieldPct: 10.2,
     minInvestment: 10_00_000,
     pricePerUnit: 8_200,
     totalUnits: 11585,
@@ -213,6 +240,10 @@ export const marketplaceProperties: MarketplaceProperty[] = [
     occupancyPct: 88,
     waleYears: 4.5,
     assetGrade: "Grade A",
+    carpetAreaSqft: 95000,
+    rbiRepoRatePct: 6.25,
+    expectedRentalEscalationPct: 5.0,
+    terminalCapRatePct: 8.0,
     imageUrl: "",
   },
   {
@@ -221,10 +252,12 @@ export const marketplaceProperties: MarketplaceProperty[] = [
     propertyName: "Brookfield Equinox — Andheri East",
     city: "Mumbai",
     state: "Maharashtra",
+    cityTier: "tier_1",
     totalValueCr: 310,
     totalValue: 310_00_00_000,
     projectedIRR: 9.8,
     dividendYield: 8.1,
+    baseRentalYieldPct: 9.1,
     minInvestment: 10_00_000,
     pricePerUnit: 13_400,
     totalUnits: 23134,
@@ -232,6 +265,10 @@ export const marketplaceProperties: MarketplaceProperty[] = [
     occupancyPct: 95,
     waleYears: 6.8,
     assetGrade: "Grade A+",
+    carpetAreaSqft: 150000,
+    rbiRepoRatePct: 6.25,
+    expectedRentalEscalationPct: 5.0,
+    terminalCapRatePct: 8.0,
     imageUrl: "",
   },
   {
@@ -240,10 +277,12 @@ export const marketplaceProperties: MarketplaceProperty[] = [
     propertyName: "L&T Techpark — Navi Mumbai",
     city: "Navi Mumbai",
     state: "Maharashtra",
+    cityTier: "tier_2",
     totalValueCr: 72,
     totalValue: 72_00_00_000,
     projectedIRR: 13.1,
     dividendYield: 10.2,
+    baseRentalYieldPct: 10.5,
     minInvestment: 10_00_000,
     pricePerUnit: 7_800,
     totalUnits: 9230,
@@ -251,6 +290,10 @@ export const marketplaceProperties: MarketplaceProperty[] = [
     occupancyPct: 86,
     waleYears: 3.9,
     assetGrade: "Grade B+",
+    carpetAreaSqft: 86000,
+    rbiRepoRatePct: 6.25,
+    expectedRentalEscalationPct: 5.0,
+    terminalCapRatePct: 8.5,
     imageUrl: "",
   },
 ];

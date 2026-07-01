@@ -5,6 +5,16 @@ import Link from "next/link";
 import { Sidebar } from "@/components/sidebar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { formatINR, formatPercent, plColor } from "@/lib/format";
 import type { InvestmentRecord } from "@/lib/auth-db";
 import {
@@ -22,6 +32,10 @@ import {
   CalendarDays,
   Sparkles,
   ShieldCheck,
+  Minus,
+  Plus,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 
 interface PortfolioSummaryData {
@@ -30,40 +44,48 @@ interface PortfolioSummaryData {
   unrealisedGainPct: number;
   quarterlyYield: number;
   totalHoldings: number;
+  availableBalance?: number;
 }
 
 export default function PortfolioPage() {
   const [summary, setSummary] = useState<PortfolioSummaryData | null>(null);
   const [investments, setInvestments] = useState<InvestmentRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sellDialogOpen, setSellDialogOpen] = useState(false);
+  const [selectedSale, setSelectedSale] = useState<InvestmentRecord | null>(null);
+  const [sellUnits, setSellUnits] = useState(1);
+  const [selling, setSelling] = useState(false);
+  const [sellResult, setSellResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  async function loadData() {
+    const [summaryRes, investmentsRes] = await Promise.all([
+      fetch("/api/investments/summary", { cache: "no-store" }),
+      fetch("/api/investments", { cache: "no-store" }),
+    ]);
+
+    const summaryData = await summaryRes.json();
+    const investmentsData = await investmentsRes.json();
+
+    if (summaryData.summary) {
+      setSummary(summaryData.summary);
+    }
+    if (investmentsData.investments) {
+      setInvestments(investmentsData.investments);
+    }
+  }
 
   useEffect(() => {
     let active = true;
 
-    async function loadData() {
+    async function loadAsync() {
       try {
-        const [summaryRes, investmentsRes] = await Promise.all([
-          fetch("/api/investments/summary", { cache: "no-store" }),
-          fetch("/api/investments", { cache: "no-store" }),
-        ]);
-
-        const summaryData = await summaryRes.json();
-        const investmentsData = await investmentsRes.json();
-
-        if (active) {
-          if (summaryData.summary) {
-            setSummary(summaryData.summary);
-          }
-          if (investmentsData.investments) {
-            setInvestments(investmentsData.investments);
-          }
-        }
+        await loadData();
       } finally {
         if (active) setLoading(false);
       }
     }
 
-    loadData();
+    loadAsync();
     return () => {
       active = false;
     };
@@ -200,6 +222,32 @@ export default function PortfolioPage() {
                   </CardContent>
                 </Card>
 
+                {/* Available Balance */}
+                <Card className="relative overflow-hidden border-border/60 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-teal-400 to-teal-600" />
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between">
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          Available Balance
+                        </span>
+                        <span className="text-2xl font-bold tracking-tight text-foreground">
+                          {formatINR(displaySummary.availableBalance ?? 0)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-teal-50 text-teal-600">
+                        <IndianRupee className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <CalendarDays className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">
+                        Ready to deploy into new deals
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+
                 {/* Total Holdings */}
                 <Card className="relative overflow-hidden border-border/60 shadow-sm hover:shadow-md transition-shadow">
                   <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-violet-400 to-violet-600" />
@@ -328,6 +376,21 @@ export default function PortfolioPage() {
                                   </p>
                                 </div>
                               </div>
+                              <div className="mt-4 flex items-center justify-end">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedSale(inv);
+                                    setSellUnits(1);
+                                    setSellResult(null);
+                                    setSellDialogOpen(true);
+                                  }}
+                                  className="w-full sm:w-auto"
+                                >
+                                  Sell units
+                                </Button>
+                              </div>
                             </div>
                           );
                         })}
@@ -454,6 +517,156 @@ export default function PortfolioPage() {
           )}
         </div>
       </main>
+
+      <Dialog open={sellDialogOpen} onOpenChange={setSellDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          {sellResult?.success ? (
+            <div className="flex flex-col items-center gap-4 py-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
+                <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+              </div>
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-foreground">Sell order placed</h3>
+                <p className="mt-2 text-sm text-muted-foreground">{sellResult.message}</p>
+              </div>
+              <div className="flex w-full gap-3 mt-2">
+                <DialogClose render={<Button variant="outline" className="flex-1" />}>
+                  Close
+                </DialogClose>
+                <Button
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700"
+                  onClick={async () => {
+                    setSellDialogOpen(false);
+                    setSellResult(null);
+                    setSelectedSale(null);
+                    setLoading(true);
+                    await loadData();
+                    setLoading(false);
+                  }}
+                >
+                  View Portfolio
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>Sell your holding</DialogTitle>
+                <DialogDescription>
+                  {selectedSale?.asset_name} — {selectedSale?.city}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="rounded-xl bg-slate-950 p-4 text-white">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wide">Units held</p>
+                    <p className="text-lg font-bold mt-0.5">{selectedSale?.units_held}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wide">Unit price</p>
+                    <p className="text-lg font-bold text-emerald-400 mt-0.5">
+                      {formatINR(selectedSale ? Math.round(selectedSale.current_value / Math.max(1, selectedSale.units_held)) : 0)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-sm font-medium text-foreground">Units to sell</label>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setSellUnits(Math.max(1, sellUnits - 1))}
+                    disabled={sellUnits <= 1}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-background text-foreground transition-colors hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <div className="flex-1">
+                    <input
+                      type="number"
+                      min={1}
+                      max={selectedSale?.units_held ?? 1}
+                      value={sellUnits}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        if (!Number.isNaN(v) && v >= 1) {
+                          setSellUnits(Math.min(v, selectedSale?.units_held ?? 1));
+                        }
+                      }}
+                      className="w-full rounded-lg border border-border bg-background px-4 py-2 text-center text-lg font-bold text-foreground outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setSellUnits(Math.min(sellUnits + 1, selectedSale?.units_held ?? 1))}
+                    disabled={sellUnits >= (selectedSale?.units_held ?? 1)}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-background text-foreground transition-colors hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              {sellResult && !sellResult.success && (
+                <div className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {sellResult.message}
+                </div>
+              )}
+
+              <DialogFooter>
+                <DialogClose render={<Button variant="outline" />}>
+                  Cancel
+                </DialogClose>
+                <Button
+                  onClick={async () => {
+                    if (!selectedSale) return;
+                    setSelling(true);
+                    setSellResult(null);
+
+                    try {
+                      const response = await fetch("/api/investments/sell", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          investmentId: selectedSale.id,
+                          unitsToSell: sellUnits,
+                          sellPricePerUnit: Math.round(selectedSale.current_value / Math.max(1, selectedSale.units_held)),
+                        }),
+                      });
+                      const body = await response.json();
+                      if (response.ok && body.success) {
+                        setSellResult({
+                          success: true,
+                          message: `Sold ${sellUnits} unit${sellUnits > 1 ? "s" : ""} for ${formatINR(body.saleProceeds)}.`,
+                        });
+                        await loadData();
+                        setSelectedSale(body.remainingUnits === 0 ? null : selectedSale);
+                      } else {
+                        setSellResult({
+                          success: false,
+                          message: body.error || "Unable to complete sale.",
+                        });
+                      }
+                    } catch (error) {
+                      setSellResult({
+                        success: false,
+                        message: "Network error. Please try again.",
+                      });
+                    } finally {
+                      setSelling(false);
+                    }
+                  }}
+                  disabled={selling || !selectedSale}
+                  className="bg-rose-600 hover:bg-rose-700"
+                >
+                  {selling ? "Processing…" : `Sell ${sellUnits} unit${sellUnits > 1 ? "s" : ""}`}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

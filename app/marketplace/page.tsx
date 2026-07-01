@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { RealEstateNews } from "@/components/real-estate-news";
@@ -17,6 +17,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { marketplaceProperties, type MarketplaceProperty } from "@/lib/mock-data";
+import { predictProperty, type PropertyPrediction } from "@/lib/property-prediction";
 import { formatINR, formatCrore, formatPercent } from "@/lib/format";
 import {
   Store,
@@ -43,6 +44,36 @@ export default function MarketplacePage() {
   const [units, setUnits] = useState(1);
   const [buying, setBuying] = useState(false);
   const [buyResult, setBuyResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [availableBalance, setAvailableBalance] = useState<number | null>(null);
+
+  const predictions = useMemo<Partial<Record<string, PropertyPrediction>>>(() => {
+    return Object.fromEntries(
+      marketplaceProperties.map((property) => [property.id, predictProperty(property)])
+    );
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadBalance() {
+      try {
+        const response = await fetch("/api/investments/summary", { cache: "no-store" });
+        const data = await response.json();
+        if (active && data?.summary?.availableBalance != null) {
+          setAvailableBalance(data.summary.availableBalance);
+        }
+      } catch {
+        if (active) {
+          setAvailableBalance(null);
+        }
+      }
+    }
+
+    loadBalance();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   function openBuyDialog(property: MarketplaceProperty) {
     setSelectedProperty(property);
@@ -59,7 +90,7 @@ export default function MarketplacePage() {
 
     try {
       const totalAmount = units * selectedProperty.pricePerUnit;
-      const res = await fetch("/api/investments", {
+      const res = await fetch("/api/investments/buy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -79,6 +110,7 @@ export default function MarketplacePage() {
           success: true,
           message: `Successfully purchased ${units} unit${units > 1 ? "s" : ""} of ${selectedProperty.propertyName}!`,
         });
+        setAvailableBalance((prev) => (prev != null ? prev - totalAmount : prev));
       } else {
         setBuyResult({
           success: false,
@@ -118,9 +150,14 @@ export default function MarketplacePage() {
                   Browse SEBI-compliant SM REIT schemes across India&apos;s top commercial properties. Minimum investment ₹10 Lakhs.
                 </p>
               </div>
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                <span>{marketplaceProperties.length} active listings</span>
+              <div className="grid gap-3 sm:grid-cols-[auto_1fr] sm:items-center">
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                  <span>{marketplaceProperties.length} active listings</span>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-2 text-sm font-medium text-foreground">
+                  Available balance: {availableBalance != null ? formatINR(availableBalance) : "Loading..."}
+                </div>
               </div>
             </div>
           </section>
@@ -179,12 +216,13 @@ export default function MarketplacePage() {
                     </div>
                   </div>
 
-                  {/* Key metrics */}
                   <div className="mt-4 grid grid-cols-3 gap-3">
                     <div className="rounded-lg bg-emerald-50/80 border border-emerald-100 p-2.5 text-center">
                       <TrendingUp className="h-3.5 w-3.5 text-emerald-600 mx-auto mb-1" />
-                      <p className="text-[10px] text-emerald-600/80 uppercase">IRR</p>
-                      <p className="text-sm font-bold text-emerald-700">{formatPercent(property.projectedIRR)}</p>
+                      <p className="text-[10px] text-emerald-600/80 uppercase">Agent IRR</p>
+                      <p className="text-sm font-bold text-emerald-700">
+                        {formatPercent(predictions[property.id]?.predictedIRR ?? property.projectedIRR)}
+                      </p>
                     </div>
                     <div className="rounded-lg bg-blue-50/80 border border-blue-100 p-2.5 text-center">
                       <IndianRupee className="h-3.5 w-3.5 text-blue-600 mx-auto mb-1" />

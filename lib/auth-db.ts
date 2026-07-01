@@ -8,6 +8,7 @@ interface UserRecord {
   email: string;
   full_name: string;
   kyc_tier: string;
+  available_balance: number;
   created_at: string;
 }
 
@@ -53,9 +54,21 @@ export async function initDb() {
       full_name TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       kyc_tier TEXT NOT NULL DEFAULT 'tier_0',
+      available_balance REAL NOT NULL DEFAULT 2500000,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  const userColumns = await db.execute({ sql: "PRAGMA table_info(users)" });
+  const hasAvailableBalance = (userColumns.rows as Array<{ name: string }>).some(
+    (column) => column.name === "available_balance"
+  );
+
+  if (!hasAvailableBalance) {
+    await db.execute({
+      sql: "ALTER TABLE users ADD COLUMN available_balance REAL NOT NULL DEFAULT 2500000",
+    });
+  }
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS investments (
@@ -88,12 +101,17 @@ export async function createUser(input: {
   await _initPromise;
   const db = getDb();
   const result = await db.execute({
-    sql: "INSERT INTO users (email, full_name, password_hash) VALUES (?, ?, ?)",
-    args: [input.email.toLowerCase(), input.fullName.trim(), hashPassword(input.password)],
+    sql: "INSERT INTO users (email, full_name, password_hash, available_balance) VALUES (?, ?, ?, ?)",
+    args: [
+      input.email.toLowerCase(),
+      input.fullName.trim(),
+      hashPassword(input.password),
+      2500000,
+    ],
   });
 
   const row = await db.execute({
-    sql: "SELECT id, email, full_name AS fullName, kyc_tier AS kycTier, created_at AS createdAt FROM users WHERE id = ?",
+    sql: "SELECT id, email, full_name AS fullName, kyc_tier AS kycTier, available_balance AS availableBalance, created_at AS createdAt FROM users WHERE id = ?",
     args: [result.lastInsertRowid!],
   });
 
@@ -104,7 +122,7 @@ export async function verifyUser(input: { email: string; password: string }) {
   await _initPromise;
   const db = getDb();
   const result = await db.execute({
-    sql: "SELECT id, email, full_name AS fullName, password_hash AS passwordHash, kyc_tier AS kycTier, created_at AS createdAt FROM users WHERE email = ?",
+    sql: "SELECT id, email, full_name AS fullName, password_hash AS passwordHash, kyc_tier AS kycTier, available_balance AS availableBalance, created_at AS createdAt FROM users WHERE email = ?",
     args: [input.email.toLowerCase()],
   });
 
@@ -128,13 +146,76 @@ export async function getUserById(id: string | number) {
   await _initPromise;
   const db = getDb();
   const result = await db.execute({
-    sql: "SELECT id, email, full_name AS fullName, kyc_tier AS kycTier, created_at AS createdAt FROM users WHERE id = ?",
+    sql: "SELECT id, email, full_name AS fullName, kyc_tier AS kycTier, available_balance AS availableBalance, created_at AS createdAt FROM users WHERE id = ?",
     args: [Number(id)],
   });
 
   return (result.rows[0] as unknown as
-    | (UserRecord & { fullName: string; kycTier: string; createdAt: string })
+    | (UserRecord & { fullName: string; kycTier: string; availableBalance: number; createdAt: string })
     | undefined) ?? undefined;
+}
+
+export async function adjustUserBalance(userId: number, amount: number) {
+  await _initPromise;
+  const db = getDb();
+  await db.execute({
+    sql: "UPDATE users SET available_balance = available_balance + ? WHERE id = ?",
+    args: [amount, userId],
+  });
+
+  const result = await db.execute({
+    sql: "SELECT available_balance AS availableBalance FROM users WHERE id = ?",
+    args: [userId],
+  });
+
+  return (result.rows[0] as { availableBalance: number })?.availableBalance ?? 0;
+}
+
+export async function getInvestmentById(id: number, userId: number) {
+  await _initPromise;
+  const db = getDb();
+  const result = await db.execute({
+    sql: "SELECT * FROM investments WHERE id = ? AND user_id = ?",
+    args: [id, userId],
+  });
+
+  return (result.rows[0] as InvestmentRecord | undefined) ?? undefined;
+}
+
+export async function updateInvestment(input: {
+  id: number;
+  investedAmount: number;
+  currentValue: number;
+  returnsPct: number;
+  unitsHeld: number;
+}) {
+  await _initPromise;
+  const db = getDb();
+  await db.execute({
+    sql: `UPDATE investments SET invested_amount = ?, current_value = ?, returns_pct = ?, units_held = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    args: [
+      input.investedAmount,
+      input.currentValue,
+      input.returnsPct,
+      input.unitsHeld,
+      input.id,
+    ],
+  });
+
+  const result = await db.execute({
+    sql: "SELECT * FROM investments WHERE id = ?",
+    args: [input.id],
+  });
+  return result.rows[0] as InvestmentRecord;
+}
+
+export async function deleteInvestmentById(id: number) {
+  await _initPromise;
+  const db = getDb();
+  await db.execute({
+    sql: "DELETE FROM investments WHERE id = ?",
+    args: [id],
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -197,6 +278,7 @@ export async function getUserPortfolioSummary(userId: number) {
   });
 
   const row = result.rows[0] as unknown as { totalInvested: number; currentValue: number; totalHoldings: number };
+  const user = await getUserById(userId);
 
   const unrealisedGainPct =
     row.totalInvested > 0
@@ -211,6 +293,7 @@ export async function getUserPortfolioSummary(userId: number) {
     unrealisedGainPct: Math.round(unrealisedGainPct * 100) / 100,
     quarterlyYield: Math.round(quarterlyYield),
     totalHoldings: row.totalHoldings,
+    availableBalance: user?.availableBalance ?? 0,
   };
 }
 

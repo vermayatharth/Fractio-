@@ -1,23 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { getInvestmentsByUser, addInvestment, getUserById, adjustUserBalance } from "@/lib/auth-db";
-
-export async function GET() {
-  const cookieStore = await cookies();
-  const userId = cookieStore.get("fractio_session")?.value;
-
-  if (!userId) {
-    return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
-  }
-
-  const user = await getUserById(userId);
-  if (!user) {
-    return NextResponse.json({ error: "User not found." }, { status: 401 });
-  }
-
-  const investments = await getInvestmentsByUser(user.id as number);
-  return NextResponse.json({ investments });
-}
+import { getUserById, addInvestment, adjustUserBalance } from "@/lib/auth-db";
 
 export async function POST(request: Request) {
   const cookieStore = await cookies();
@@ -65,7 +48,8 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ success: true, investment });
-  } catch {
-    return NextResponse.json({ error: "Unable to add investment." }, { status: 500 });
+  } catch (error) {
+    console.error("[buy] error", error);
+    return NextResponse.json({ error: "Unable to process purchase." }, { status: 500 });
   }
 }
