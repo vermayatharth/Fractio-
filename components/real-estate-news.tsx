@@ -116,7 +116,7 @@ export function RealEstateNews() {
           </div>
           <div>
             <h2 className="text-sm font-semibold text-foreground">Top Real Estate News</h2>
-            <p className="text-[11px] text-muted-foreground">Latest from India's commercial property market</p>
+            <p className="text-[11px] text-muted-foreground">Latest from India&apos;s commercial property market</p>
           </div>
         </div>
         <div className="flex gap-1">

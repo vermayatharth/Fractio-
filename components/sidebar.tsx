@@ -28,7 +28,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
-  const [user, setUser] = useState<{ fullName: string; kycTier: string } | null>(null);
+  const [user, setUser] = useState<{ fullName?: string; kycTier?: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,9 +37,21 @@ export function Sidebar() {
     async function loadUser() {
       try {
         const response = await fetch("/api/auth/me", { cache: "no-store" });
-        const data = await response.json();
+
+        let data: { user?: { fullName?: string; kycTier?: string } | null } | null = null;
+        try {
+          data = await response.json();
+        } catch {
+          data = null;
+        }
+
         if (active) {
-          setUser(data.user ?? null);
+          setUser(data?.user ?? null);
+        }
+      } catch (error) {
+        console.error("[sidebar] Failed to load user:", error);
+        if (active) {
+          setUser(null);
         }
       } finally {
         if (active) {
@@ -53,6 +65,7 @@ export function Sidebar() {
       active = false;
     };
   }, []);
+
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
