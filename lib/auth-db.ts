@@ -46,6 +46,12 @@ export function getDb(): Client {
 }
 
 export async function initDb() {
+  const url = process.env.TURSO_DATABASE_URL;
+  if (!url) {
+    console.warn("TURSO_DATABASE_URL is not set; skipping database initialization.");
+    return;
+  }
+
   const db = getDb();
   await db.execute(`
     CREATE TABLE IF NOT EXISTS users (
@@ -60,9 +66,10 @@ export async function initDb() {
   `);
 
   const userColumns = await db.execute({ sql: "PRAGMA table_info(users)" });
-  const hasAvailableBalance = (userColumns.rows as Array<{ name: string }>).some(
-    (column) => column.name === "available_balance"
-  );
+  const hasAvailableBalance = userColumns.rows.some((column) => {
+    const name = (column as { name?: unknown }).name;
+    return typeof name === "string" && name === "available_balance";
+  });
 
   if (!hasAvailableBalance) {
     await db.execute({
@@ -168,7 +175,8 @@ export async function adjustUserBalance(userId: number, amount: number) {
     args: [userId],
   });
 
-  return (result.rows[0] as { availableBalance: number })?.availableBalance ?? 0;
+  const row = result.rows[0] as { availableBalance?: unknown } | undefined;
+  return typeof row?.availableBalance === "number" ? row.availableBalance : 0;
 }
 
 export async function getInvestmentById(id: number, userId: number) {
@@ -179,7 +187,23 @@ export async function getInvestmentById(id: number, userId: number) {
     args: [id, userId],
   });
 
-  return (result.rows[0] as InvestmentRecord | undefined) ?? undefined;
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row) {
+    return undefined;
+  }
+
+  return {
+    id: Number(row.id),
+    user_id: Number(row.user_id),
+    asset_name: String(row.asset_name ?? ""),
+    city: String(row.city ?? ""),
+    invested_amount: Number(row.invested_amount ?? 0),
+    current_value: Number(row.current_value ?? 0),
+    returns_pct: Number(row.returns_pct ?? 0),
+    units_held: Number(row.units_held ?? 0),
+    invested_at: String(row.invested_at ?? ""),
+    updated_at: String(row.updated_at ?? ""),
+  } satisfies InvestmentRecord;
 }
 
 export async function updateInvestment(input: {
@@ -206,7 +230,24 @@ export async function updateInvestment(input: {
     sql: "SELECT * FROM investments WHERE id = ?",
     args: [input.id],
   });
-  return result.rows[0] as InvestmentRecord;
+
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row) {
+    throw new Error("Investment not found after update");
+  }
+
+  return {
+    id: Number(row.id),
+    user_id: Number(row.user_id),
+    asset_name: String(row.asset_name ?? ""),
+    city: String(row.city ?? ""),
+    invested_amount: Number(row.invested_amount ?? 0),
+    current_value: Number(row.current_value ?? 0),
+    returns_pct: Number(row.returns_pct ?? 0),
+    units_held: Number(row.units_held ?? 0),
+    invested_at: String(row.invested_at ?? ""),
+    updated_at: String(row.updated_at ?? ""),
+  } satisfies InvestmentRecord;
 }
 
 export async function deleteInvestmentById(id: number) {
